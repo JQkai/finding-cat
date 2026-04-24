@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>找貓咪大冒險</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+
+        body {
+            font-family: 'ZCOOL+KuaiLe', cursive, sans-serif;
+            background-color: #fef3c7;
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 1000px;
+            max-height: 700px;
+            margin: auto;
+            background: #fffbeb;
+            border: 8px solid #d97706;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 遊戲背景場景 */
+        .scene {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, #fef3c7 60%, #d97706 60%);
+            z-index: 1;
+        }
+
+        /* 家具裝飾 - 層級較低 (1-10) */
+        .furniture {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        /* 貓咪樣式 - 根據上傳圖片重新設計的剪影 */
+        .cat {
+            position: absolute;
+            cursor: pointer;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 20; 
+            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.2));
+            width: 50px;
+            height: 50px;
+            opacity: 0.85;
+        }
+
+        .cat:hover {
+            transform: scale(1.15);
+            opacity: 1;
+        }
+
+        .cat.found {
+            pointer-events: none;
+            opacity: 1 !important;
+            filter: brightness(1.3) drop-shadow(0 0 12px #fbbf24);
+            animation: bounce 0.5s infinite alternate;
+            z-index: 30;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-12px); }
+        }
+
+        /* 氣泡訊息 */
+        .meow-bubble {
+            position: absolute;
+            background: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            border: 2px solid #fbbf24;
+            font-size: 16px;
+            pointer-events: none;
+            animation: fadeUp 1s forwards;
+            z-index: 100;
+        }
+
+        @keyframes fadeUp {
+            0% { opacity: 0; transform: translateY(0); }
+            50% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-30px); }
+        }
+
+        /* UI 層級 */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px 25px;
+            z-index: 200;
+            pointer-events: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stats-box {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 20px;
+            border-radius: 15px;
+            border: 2px solid #f59e0b;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            pointer-events: auto;
+        }
+
+        .btn-action {
+            pointer-events: auto;
+            background: #d97706;
+            color: white;
+            padding: 8px 18px;
+            border-radius: 99px;
+            font-weight: bold;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0 #92400e;
+        }
+
+        .btn-action:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #92400e;
+        }
+
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div class="game-container" id="gameArea">
+        <div class="scene" id="scene"></div>
+
+        <div class="ui-layer">
+            <div class="stats-box flex gap-6 items-center">
+                <div class="text-xl text-amber-900">🐾 <span id="foundCount">0</span> / <span id="totalCount">10</span></div>
+                <div class="text-xl font-bold text-red-600">⏳ <span id="timer">60</span>s</div>
+            </div>
+            <button class="btn-action" onclick="resetGame()">重新開始</button>
+        </div>
+
+        <div id="overlay">
+            <h1 id="overlayTitle" class="text-6xl mb-6 font-bold text-amber-400">找貓咪大冒險</h1>
+            <p id="overlayDesc" class="text-xl mb-8">貓咪們現在變成了優雅的剪影，快找出牠們！</p>
+            <button class="btn-action text-2xl px-12 py-4" onclick="startGame()">開始遊戲</button>
+        </div>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById('gameArea');
+        const scene = document.getElementById('scene');
+        const foundCountEl = document.getElementById('foundCount');
+        const timerEl = document.getElementById('timer');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlayTitle');
+        const overlayDesc = document.getElementById('overlayDesc');
+
+        let foundCount = 0;
+        let totalCats = 10;
+        let timeLeft = 60;
+        let timerInterval = null;
+        let isPlaying = false;
+
+        // 極深色系
+        const catStyles = [
+            { color: '#000000' },
+            { color: '#121212' },
+            { color: '#1a1a1b' },
+            { color: '#0f0a05' },
+            { color: '#0a0d14' }
+        ];
+
+        const furnitureData = [
+            { svg: '<rect width="200" height="80" rx="20" fill="#92400e"/><rect x="20" y="-30" width="160" height="60" rx="15" fill="#b45309"/>', w: 200, h: 100 },
+            { svg: '<rect width="120" height="250" fill="#78350f"/><rect x="10" y="10" width="100" height="10" fill="#451a03"/><rect x="10" y="50" width="100" height="10" fill="#451a03"/>', w: 120, h: 250 },
+            { svg: '<rect x="30" y="60" width="40" height="50" fill="#92400e"/><path d="M50,10 Q80,40 50,70 Q20,40 50,10" fill="#15803d"/>', w: 100, h: 120 },
+            { svg: '<rect width="150" height="15" fill="#d97706"/><rect x="20" y="15" width="10" height="40" fill="#b45309"/>', w: 150, h: 60 }
+        ];
+
+        function createScene() {
+            scene.innerHTML = '';
+            for(let i = 0; i < 22; i++) {
+                const data = furnitureData[Math.floor(Math.random() * furnitureData.length)];
+                const div = document.createElement('div');
+                div.className = 'furniture';
+                div.style.left = Math.random() * 85 + '%';
+                div.style.top = Math.random() * 80 + '%';
+                div.style.zIndex = Math.floor(Math.random() * 10) + 1; 
+                div.innerHTML = `<svg width="${data.w}" height="${data.h}">${data.svg}</svg>`;
+                scene.appendChild(div);
+            }
+        }
+
+        function spawnCats() {
+            for (let i = 0; i < totalCats; i++) {
+                const cat = document.createElement('div');
+                cat.className = 'cat';
+                const style = catStyles[Math.floor(Math.random() * catStyles.length)];
+                
+                const x = 5 + Math.random() * 85;
+                const y = 20 + Math.random() * 70; // 避開 UI 區
+                
+                cat.style.left = x + '%';
+                cat.style.top = y + '%';
+                cat.style.zIndex = 20; 
+
+                // 根據上傳圖片重新繪製的貓咪剪影 SVG
+                cat.innerHTML = `
+                    <svg viewBox="0 0 100 100" width="100%" height="100%">
+                        <path fill="${style.color}" d="
+                            M80,85 
+                            C88,85 92,82 92,75 
+                            C92,68 85,65 80,65 
+                            L80,40 
+                            C80,30 75,22 65,22 
+                            L45,22 
+                            C35,22 30,30 30,40 
+                            L30,55 
+                            C22,55 12,60 12,75 
+                            C12,85 20,90 35,90 
+                            L80,90 Z
+                            M40,22 L35,10 L45,18 Z
+                            M60,22 L65,10 L55,18 Z
+                        " />
+                        <!-- 只有找到後才顯示的眼睛，增加可愛感 -->
+                        <circle class="cat-eye hidden" cx="42" cy="35" r="3" fill="white" />
+                        <circle class="cat-eye hidden" cx="58" cy="35" r="3" fill="white" />
+                    </svg>
+                `;
+
+                cat.onclick = (e) => {
+                    if (!isPlaying) return;
+                    if (cat.classList.contains('found')) return;
+
+                    cat.classList.add('found');
+                    // 找到後讓眼睛顯現
+                    cat.querySelectorAll('.cat-eye').forEach(eye => eye.classList.remove('hidden'));
+                    
+                    foundCount++;
+                    foundCountEl.innerText = foundCount;
+                    
+                    showMeow(e.clientX, e.clientY);
+                    
+                    if (foundCount === totalCats) {
+                        endGame(true);
+                    }
+                };
+
+                scene.appendChild(cat);
+            }
+        }
+
+        function showMeow(x, y) {
+            const bubble = document.createElement('div');
+            bubble.className = 'meow-bubble';
+            bubble.innerText = '抓到你了！🐾';
+            const rect = gameArea.getBoundingClientRect();
+            bubble.style.left = (x - rect.left) + 'px';
+            bubble.style.top = (y - rect.top) + 'px';
+            gameArea.appendChild(bubble);
+            setTimeout(() => bubble.remove(), 1000);
+        }
+
+        function startGame() {
+            foundCount = 0;
+            timeLeft = 60;
+            isPlaying = true;
+            foundCountEl.innerText = foundCount;
+            timerEl.innerText = timeLeft;
+            overlay.classList.add('hidden');
+            
+            createScene();
+            spawnCats();
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerEl.innerText = timeLeft;
+                if (timeLeft <= 0) endGame(false);
+            }, 1000);
+        }
+
+        function endGame(isWin) {
+            isPlaying = false;
+            clearInterval(timerInterval);
+            overlay.classList.remove('hidden');
+            
+            if (isWin) {
+                overlayTitle.innerText = "剪影守護者！";
+                overlayDesc.innerText = `你找齊了所有坐姿貓咪剪影！剩餘：${timeLeft} 秒。`;
+            } else {
+                overlayTitle.innerText = "時間結束！";
+                overlayDesc.innerText = `剪影貓咪躲得很好呢，你抓到了 ${foundCount} 隻。`;
+            }
+        }
+
+        function resetGame() {
+            clearInterval(timerInterval);
+            overlay.classList.remove('hidden');
+            overlayTitle.innerText = "找貓咪大冒險";
+            overlayDesc.innerText = "準備好再次尋找可愛的貓咪剪影了嗎？";
+            scene.innerHTML = '';
+        }
+
+        window.onload = () => createScene();
+    </script>
+</body>
+</html>

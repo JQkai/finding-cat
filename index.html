@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>找貓咪大冒險</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-container" id="gameArea">
+    <div class="scene" id="scene"></div>
+
+    <div class="ui-layer">
+      <div class="stats-box">
+        <div class="stats-row">
+          <div class="stat-text">🐾 <span id="foundCount">0</span> / <span id="totalCount">10</span></div>
+          <div class="stat-text stat-timer">⏳ <span id="timer">60</span>s</div>
+        </div>
+      </div>
+      <button class="btn-action" id="resetBtn" type="button">重新開始</button>
+    </div>
+
+    <div id="overlay">
+      <h1 id="overlayTitle">找貓咪大冒險</h1>
+      <p id="overlayDesc">貓咪們現在變成了優雅的剪影，快找出牠們！</p>
+      <button class="btn-action btn-start" id="startBtn" type="button">開始遊戲</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
